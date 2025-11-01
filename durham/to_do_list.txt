@@ -1,0 +1,9 @@
+(REMOVE THIS FILE AFTER FINISHING)
+
+x = snow ustinov snow (x = 9 * 9)
+tlc(x) - should output 81, but outputs 9 
+Unintended Behaviour
+
+v = (chads, chads, chads)
+tlc(v) - should ouput (1,1,1), but outputs ()
+Unintended Behaviour

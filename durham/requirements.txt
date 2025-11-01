@@ -1,0 +1,5 @@
+CMake >3.10 
+C++ Compiler (C++20)
+NASM 
+MinGW-w64 GCC
+

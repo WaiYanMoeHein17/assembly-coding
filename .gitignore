@@ -1,0 +1,7 @@
+\nasm 
+\misc
+*.o 
+*.exe
+hello
+durham/build/
+.vscode

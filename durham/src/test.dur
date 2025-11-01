@@ -1,0 +1,14 @@
+tlc(butler_chads_marys_collingwood_johns_castle_cuths_trevs_aidans_snow);
+tlc(chads durham chads); 
+tlc(marys durham marys); 
+tlc(butler durham snow); 
+tlc(castle ustinov castle);
+
+v = (chads, chads, chads); 
+tlc(v); 
+
+w = butler; 
+tlc(w); 
+
+x = snow ustinov snow; 
+tlc(x);
