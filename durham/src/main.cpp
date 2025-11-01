@@ -1,5 +1,7 @@
 #include "main.h"
 #include "tokenizer.h"
+#include "parser.h"
+#include "gen_asm.h"
 
 //using namespace std;
 
@@ -50,8 +52,11 @@ int main(int argc, char** argv) {
 
     Tokenizer tokenizer(contents); 
     std::vector<Token> tokens = tokenizer.tokenize(); 
-    // debug
-    std::string assembly_code = generate_assembly(tokens);
+
+    Parser parser(tokens);
+    std::shared_ptr<ASTNode> ast = parser.parse();
+    
+    std::string assembly_code = generate_assembly_from_ast(ast);
 
     // Write assembly
     std::ofstream output("output.asm");

@@ -123,6 +123,13 @@ std::vector<Token> Tokenizer::tokenize() {
                 tokens.push_back({TokenType::_if});
             } else if (buffer == "while") {
                 tokens.push_back({TokenType::_while});
+            // Vector/Array keywords
+            } else if (buffer == "new") {
+                tokens.push_back({TokenType::_new});
+            } else if (buffer == "college") {
+                tokens.push_back({TokenType::_college});
+            } else if (buffer == "at") {
+                tokens.push_back({TokenType::_at});
             // Arithmetic operators
             } else if (buffer == "durham") {
                 tokens.push_back({TokenType::_durham});

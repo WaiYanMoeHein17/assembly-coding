@@ -1,8 +1,19 @@
-#ifndef GEN_ASM_H 
+#ifndef GEN_ASM_H
 #define GEN_ASM_H
 
-#include "main.h"
+#include "tokenizer.h"
+#include "parser.h"
+#include <string>
+#include <vector>
+#include <memory>
 
-std::string generate_assembly(const std::vector<Token>& tokens);
+// Original function (keep for backward compatibility)
+std::string generate(std::vector<Token> tokens);
 
-#endif 
+// New AST-based generator
+std::string generate_assembly_from_ast(std::shared_ptr<ASTNode> ast);
+
+// Helper for base-17 conversion
+int base17_to_decimal(const std::string& base17_str);
+
+#endif

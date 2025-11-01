@@ -42,6 +42,11 @@ enum class TokenType {
     _if,            //if 
     _while,         //while
 
+    // Vector/Array operations
+    _new,           // new
+    _college,       // college (array/vector type)
+    _at,            // at (array access)
+
     // Logical Operators
     _and,           // AND
     _or,            // OR

@@ -8,7 +8,7 @@ enable_language(ASM_NASM)
 set(CMAKE_ASM_NASM_OBJECT_FORMAT win64)
 
 # Add assembly library
-add_library(optimized_ops div3.asm)
+# add_library(optimized_ops div3.asm)
 
 # Add main executable and link with assembly
 add_executable(durham 
@@ -17,4 +17,5 @@ add_executable(durham
     src/parser.cpp
     src/gen_asm.cpp
     )
-target_link_libraries(durham PRIVATE optimized_ops)
+    
+# target_link_libraries(durham PRIVATE optimized_ops)

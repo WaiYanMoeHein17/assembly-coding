@@ -1,4 +1,22 @@
 #include "main.h"
+#include "gen_asm.h"
+
+// Forward declarations for AST-based code generation
+void generate_node(std::shared_ptr<ASTNode> node, 
+                   std::stringstream& asm_code,
+                   std::map<std::string, int>& var_offsets,
+                   int& stack_offset,
+                   int& label_counter);
+
+void generate_expression(std::shared_ptr<ASTNode> node,
+                        std::stringstream& asm_code,
+                        std::map<std::string, int>& var_offsets);
+
+void generate_condition(std::shared_ptr<ASTNode> node,
+                       std::stringstream& asm_code,
+                       std::map<std::string, int>& var_offsets,
+                       int label,
+                       const std::string& label_prefix = "while");
 
 // Helper function to convert base-17 string to decimal integer
 int base17_to_decimal(const std::string& base17_str) {
@@ -20,10 +38,10 @@ std::string generate_label(const std::string& prefix) {
     return prefix + std::to_string(label_counter++);
 }
 
-// Helper function to evaluate a condition and generate comparison code at runtime
-std::string generate_condition(const std::vector<Token>& condition_tokens, 
-                               const std::map<std::string, int>& scalars,
-                               std::stringstream& assembly_code) {
+// Helper function to evaluate a condition and generate comparison code at runtime (token-based)
+std::string generate_condition_from_tokens(const std::vector<Token>& condition_tokens, 
+                                           const std::map<std::string, int>& scalars,
+                                           std::stringstream& assembly_code) {
     // Handle compound conditions with OR: cond1 or cond2
     // For OR: if either condition is true, don't jump (continue)
     if (condition_tokens.size() == 7 && condition_tokens[3].type == TokenType::_or) {
@@ -305,7 +323,7 @@ std::string generate_assembly(const std::vector<Token>& tokens) {
                 assembly_code << loop_start << ":\n";
                 
                 // Generate condition check
-                std::string jump_instr = generate_condition(condition_tokens, scalars, assembly_code);
+                std::string jump_instr = generate_condition_from_tokens(condition_tokens, scalars, assembly_code);
                 assembly_code << "    " << jump_instr << " " << loop_end << "\n\n";
                 
                 // Process loop body - collect body tokens and recursively process
@@ -455,7 +473,7 @@ std::string generate_assembly(const std::vector<Token>& tokens) {
                 i++; // Skip 'front'
                 
                 // Generate condition check
-                std::string jump_instr = generate_condition(condition_tokens, scalars, assembly_code);
+                std::string jump_instr = generate_condition_from_tokens(condition_tokens, scalars, assembly_code);
                 assembly_code << "    " << jump_instr << " " << if_end << "\n\n";
                 
                 // Process if body - collect body tokens
@@ -598,7 +616,7 @@ std::string generate_assembly(const std::vector<Token>& tokens) {
                 assembly_code << loop_start << ":\n";
                 
                 // Generate condition check
-                std::string jump_instr = generate_condition(condition_tokens, scalars, assembly_code);
+                std::string jump_instr = generate_condition_from_tokens(condition_tokens, scalars, assembly_code);
                 assembly_code << "    " << jump_instr << " " << loop_end << "\n\n";
                 
                 // Process loop body - collect body tokens
@@ -637,7 +655,7 @@ std::string generate_assembly(const std::vector<Token>& tokens) {
                             j++; // Skip 'front'
                             
                             // Generate condition check
-                            std::string jump_instr = generate_condition(if_condition_tokens, scalars, assembly_code);
+                            std::string jump_instr = generate_condition_from_tokens(if_condition_tokens, scalars, assembly_code);
                             assembly_code << "    " << jump_instr << " " << if_end << "\n\n";
                             
                             // Collect if body tokens
@@ -945,4 +963,511 @@ std::string generate_assembly(const std::vector<Token>& tokens) {
 
     return assembly_code.str(); 
 }
+
+// Add this new function at the top after the includes
+// Helper to collect string literals from AST
+static std::map<std::string, int> string_literals;
+static int string_counter = 0;
+
+void collect_strings(std::shared_ptr<ASTNode> node) {
+    if (!node) return;
+    
+    if (node->type == NodeType::Print && node->value.has_value()) {
+        // This is a string print
+        std::string str = node->value.value();
+        if (string_literals.find(str) == string_literals.end()) {
+            string_literals[str] = string_counter++;
+        }
+    }
+    
+    // Recursively check children
+    if (node->left) collect_strings(node->left);
+    if (node->right) collect_strings(node->right);
+    for (auto& child : node->children) {
+        collect_strings(child);
+    }
+}
+
+std::string generate_assembly_from_ast(std::shared_ptr<ASTNode> ast) {
+    std::stringstream asm_code;
+    
+    // Reset and collect string literals
+    string_literals.clear();
+    string_counter = 0;
+    collect_strings(ast);
+    
+    // Header
+    asm_code << "section .data\n";
+    asm_code << "    digit db '0', 10\n";
+    asm_code << "    array times 1000 dq 0\n";
+    
+    // Add string literals
+    for (const auto& [str, id] : string_literals) {
+        asm_code << "    str_" << id << " db \"" << str << "\", 0\n";
+    }
+    asm_code << "\n";
+    
+    asm_code << "section .bss\n";
+    asm_code << "    temp_buffer resb 32\n";
+    asm_code << "    heap_space resb 8192\n";  // 8KB heap for vectors
+    asm_code << "    heap_ptr resq 1\n\n";     // Pointer to next free space
+    
+    asm_code << "section .text\n";
+    asm_code << "    global main\n";
+    asm_code << "    extern putchar\n\n";
+    
+    asm_code << "main:\n";
+    asm_code << "    push rbp\n";
+    asm_code << "    mov rbp, rsp\n";
+    asm_code << "    sub rsp, 1024\n\n";
+    asm_code << "    ; Initialize heap pointer\n";
+    asm_code << "    lea rax, [rel heap_space]\n";
+    asm_code << "    mov [rel heap_ptr], rax\n\n";
+    
+    // State for code generation
+    std::map<std::string, int> var_offsets;
+    int stack_offset = 0;
+    int label_counter = 0;
+    
+    // Generate code for the AST
+    generate_node(ast, asm_code, var_offsets, stack_offset, label_counter);
+    
+    // Footer
+    asm_code << "\n    xor eax, eax\n";
+    asm_code << "    add rsp, 1024\n";
+    asm_code << "    pop rbp\n";
+    asm_code << "    ret\n";
+    
+    return asm_code.str();
+}
+
+// Helper function to generate code for a single node
+void generate_node(std::shared_ptr<ASTNode> node, 
+                   std::stringstream& asm_code,
+                   std::map<std::string, int>& var_offsets,
+                   int& stack_offset,
+                   int& label_counter) {
+    if (!node) return;
+    
+    switch (node->type) {
+        case NodeType::Program: {
+            // Process all statements in the program
+            for (auto& child : node->children) {
+                generate_node(child, asm_code, var_offsets, stack_offset, label_counter);
+            }
+            break;
+        }
+        
+        case NodeType::Block: {
+            // Process all statements in the block
+            for (auto& child : node->children) {
+                generate_node(child, asm_code, var_offsets, stack_offset, label_counter);
+            }
+            break;
+        }
+        
+        case NodeType::Assignment: {
+            std::string var_name = node->value.value();
+            
+            // Check if this is array element assignment (left side is ArrayAccess)
+            if (node->left && node->left->type == NodeType::ArrayAccess) {
+                auto accessNode = std::static_pointer_cast<ArrayAccessNode>(node->left);
+                
+                // Get the array pointer
+                asm_code << "    mov rbx, [rbp-" << var_offsets[accessNode->arrayName] << "]\n";
+                
+                // Evaluate index and save it
+                generate_expression(accessNode->index, asm_code, var_offsets);
+                asm_code << "    push rax\n";
+                
+                // Evaluate the value to assign
+                generate_expression(node->right, asm_code, var_offsets);
+                asm_code << "    mov rcx, rax\n";  // Save value in rcx
+                
+                // Calculate offset
+                asm_code << "    pop rax\n";  // Get index back
+                asm_code << "    imul rax, 8\n";  // index * 8
+                asm_code << "    add rbx, rax\n";  // array + offset
+                asm_code << "    mov [rbx], rcx\n";  // Store value
+            } else {
+                // Regular variable assignment
+                
+                // Allocate space on stack if new variable
+                if (var_offsets.find(var_name) == var_offsets.end()) {
+                    stack_offset += 8;
+                    var_offsets[var_name] = stack_offset;
+                }
+                
+                // Generate code for the expression
+                generate_expression(node->right, asm_code, var_offsets);
+                
+                // Store result in variable
+                asm_code << "    mov [rbp-" << var_offsets[var_name] << "], rax\n";
+            }
+            break;
+        }
+        
+        case NodeType::Print: {
+            // Check if it's a string literal print
+            if (node->value.has_value()) {
+                std::string str = node->value.value();
+                int str_id = string_literals[str];
+                
+                asm_code << "    ; Print string\n";
+                asm_code << "    lea rbx, [rel str_" << str_id << "]\n";
+                asm_code << ".print_str_" << label_counter << ":\n";
+                asm_code << "    movzx rcx, byte [rbx]\n";
+                asm_code << "    test rcx, rcx\n";
+                asm_code << "    jz .done_str_" << label_counter << "\n";
+                asm_code << "    call putchar\n";
+                asm_code << "    inc rbx\n";
+                asm_code << "    jmp .print_str_" << label_counter << "\n";
+                asm_code << ".done_str_" << label_counter << ":\n";
+                asm_code << "    mov rcx, 10\n";  // Print newline
+                asm_code << "    call putchar\n";
+                
+                label_counter++;
+            } else {
+                // Generate code for the expression to print
+                generate_expression(node->left, asm_code, var_offsets);
+                
+                // Print the value in rax
+                asm_code << "    ; Print value in rax\n";
+                asm_code << "    test rax, rax\n";
+                asm_code << "    jnz .not_zero_" << label_counter << "\n";
+                asm_code << "    mov rcx, '0'\n";
+                asm_code << "    call putchar\n";
+                asm_code << "    jmp .done_print_" << label_counter << "\n";
+                asm_code << ".not_zero_" << label_counter << ":\n";
+                asm_code << "    mov rbx, 10\n";
+                asm_code << "    xor r12, r12\n";
+                asm_code << "    lea r13, [rel temp_buffer]\n";
+                asm_code << ".digit_loop_" << label_counter << ":\n";
+                asm_code << "    xor rdx, rdx\n";
+                asm_code << "    div rbx\n";
+                asm_code << "    add dl, '0'\n";
+                asm_code << "    mov [r13 + r12], dl\n";
+                asm_code << "    inc r12\n";
+                asm_code << "    test rax, rax\n";
+                asm_code << "    jnz .digit_loop_" << label_counter << "\n";
+                asm_code << ".print_loop_" << label_counter << ":\n";
+                asm_code << "    dec r12\n";
+                asm_code << "    movzx rcx, byte [r13 + r12]\n";
+                asm_code << "    call putchar\n";
+                asm_code << "    test r12, r12\n";
+                asm_code << "    jnz .print_loop_" << label_counter << "\n";
+                asm_code << ".done_print_" << label_counter << ":\n";
+                asm_code << "    mov rcx, 10\n";
+                asm_code << "    call putchar\n";
+                
+                label_counter++;
+            }
+            break;
+        }
+        
+        case NodeType::IfStatement: {
+            auto ifNode = std::static_pointer_cast<IfNode>(node);
+            int if_label = label_counter++;
+            
+            // Generate condition code
+            generate_condition(ifNode->condition, asm_code, var_offsets, if_label, "if");
+            
+            // Generate then branch
+            generate_node(ifNode->thenBranch, asm_code, var_offsets, stack_offset, label_counter);
+            
+            asm_code << ".if_end_" << if_label << ":\n";
+            break;
+        }
+        
+        case NodeType::WhileLoop: {
+            auto whileNode = std::static_pointer_cast<WhileNode>(node);
+            int while_label = label_counter++;
+            
+            asm_code << ".while_start_" << while_label << ":\n";
+            
+            // Generate condition code
+            generate_condition(whileNode->condition, asm_code, var_offsets, while_label, "while");
+            
+            // Generate body
+            generate_node(whileNode->body, asm_code, var_offsets, stack_offset, label_counter);
+            
+            asm_code << "    jmp .while_start_" << while_label << "\n";
+            asm_code << ".while_end_" << while_label << ":\n";
+            break;
+        }
+        
+        case NodeType::ForLoop: {
+            auto forNode = std::static_pointer_cast<ForNode>(node);
+            int for_label = label_counter++;
+            
+            // Generate initialization
+            generate_node(forNode->init, asm_code, var_offsets, stack_offset, label_counter);
+            
+            asm_code << ".for_start_" << for_label << ":\n";
+            
+            // Generate condition
+            generate_condition(forNode->condition, asm_code, var_offsets, for_label, "for");
+            
+            // Generate body
+            generate_node(forNode->body, asm_code, var_offsets, stack_offset, label_counter);
+            
+            // Generate increment
+            generate_node(forNode->increment, asm_code, var_offsets, stack_offset, label_counter);
+            
+            asm_code << "    jmp .for_start_" << for_label << "\n";
+            asm_code << ".for_end_" << for_label << ":\n";
+            break;
+        }
+        
+        case NodeType::VectorAlloc: {
+            // Vector allocation is handled in generate_expression
+            // This case shouldn't be reached in generate_node
+            break;
+        }
+        
+        case NodeType::ArrayAccess: {
+            // Array access is handled in generate_expression
+            // This case shouldn't be reached in generate_node
+            break;
+        }
+        
+        default:
+            break;
+    }
+}
+
+// Generate code for an expression (returns result in rax)
+void generate_expression(std::shared_ptr<ASTNode> node,
+                        std::stringstream& asm_code,
+                        std::map<std::string, int>& var_offsets) {
+    if (!node) return;
+    
+    switch (node->type) {
+        case NodeType::Literal: {
+            // Convert base-17 to decimal
+            std::string val = node->value.value();
+            int decimal = base17_to_decimal(val);
+            asm_code << "    mov rax, " << decimal << "\n";
+            break;
+        }
+        
+        case NodeType::Identifier: {
+            std::string var_name = node->value.value();
+            if (var_offsets.find(var_name) == var_offsets.end()) {
+                throw std::runtime_error("Variable '" + var_name + "' not defined");
+            }
+            asm_code << "    mov rax, [rbp-" << var_offsets[var_name] << "]\n";
+            break;
+        }
+        
+        case NodeType::BinaryOp: {
+            auto binOp = std::static_pointer_cast<BinaryOpNode>(node);
+            
+            // Generate left operand
+            generate_expression(binOp->left, asm_code, var_offsets);
+            asm_code << "    push rax\n";
+            
+            // Generate right operand
+            generate_expression(binOp->right, asm_code, var_offsets);
+            asm_code << "    mov rbx, rax\n";
+            asm_code << "    pop rax\n";
+            
+            // Perform operation
+            switch (binOp->op) {
+                case TokenType::_durham:  // +
+                    asm_code << "    add rax, rbx\n";
+                    break;
+                case TokenType::_newcastle:  // -
+                    asm_code << "    sub rax, rbx\n";
+                    break;
+                case TokenType::_york:  // *
+                    asm_code << "    imul rax, rbx\n";
+                    break;
+                case TokenType::_edinburgh:  // /
+                    asm_code << "    xor rdx, rdx\n";
+                    asm_code << "    div rbx\n";
+                    break;
+                default:
+                    break;
+            }
+            break;
+        }
+        
+        case NodeType::VectorAlloc: {
+            // new college begin SIZE end
+            auto vecNode = std::static_pointer_cast<VectorAllocNode>(node);
+            
+            // Evaluate size expression
+            generate_expression(vecNode->size, asm_code, var_offsets);
+            
+            // Allocate from heap: size * 8 bytes (each element is 64-bit)
+            asm_code << "    imul rax, 8\n";  // Convert to bytes
+            asm_code << "    mov rbx, [rel heap_ptr]\n";  // Get current heap pointer
+            asm_code << "    mov rcx, rbx\n";  // Save pointer to return
+            asm_code << "    add rbx, rax\n";  // Advance heap pointer
+            asm_code << "    mov [rel heap_ptr], rbx\n";  // Store new heap pointer
+            asm_code << "    mov rax, rcx\n";  // Return allocated pointer
+            break;
+        }
+        
+        case NodeType::ArrayAccess: {
+            // array at index
+            auto accessNode = std::static_pointer_cast<ArrayAccessNode>(node);
+            std::string array_name = accessNode->arrayName;
+            
+            if (var_offsets.find(array_name) == var_offsets.end()) {
+                throw std::runtime_error("Array '" + array_name + "' not defined");
+            }
+            
+            // Get the array pointer (stored in variable)
+            asm_code << "    mov rbx, [rbp-" << var_offsets[array_name] << "]\n";
+            
+            // Evaluate index expression
+            generate_expression(accessNode->index, asm_code, var_offsets);
+            
+            // Calculate offset: index * 8 (each element is 8 bytes)
+            asm_code << "    imul rax, 8\n";
+            
+            // Load array[index] into rax
+            asm_code << "    add rbx, rax\n";
+            asm_code << "    mov rax, [rbx]\n";
+            break;
+        }
+        
+        default:
+            break;
+    }
+}
+
+// Generate code for a condition
+void generate_condition(std::shared_ptr<ASTNode> node,
+                       std::stringstream& asm_code,
+                       std::map<std::string, int>& var_offsets,
+                       int label,
+                       const std::string& label_prefix) {
+    if (!node) return;
+    
+    if (node->type == NodeType::BinaryOp) {
+        auto binOp = std::static_pointer_cast<BinaryOpNode>(node);
+        
+        // Handle logical operators (or/and)
+        if (binOp->op == TokenType::_or) {
+            // Short-circuit OR: if left is true, skip evaluation of right
+            // We need to invert the logic: jump to end only if BOTH conditions are false
+            auto leftBin = std::static_pointer_cast<BinaryOpNode>(binOp->left);
+            auto rightBin = std::static_pointer_cast<BinaryOpNode>(binOp->right);
+            
+            // Create a temporary label for "condition satisfied"
+            int temp_label = label + 2000;
+            
+            // Evaluate left condition - if TRUE, skip the jump to end
+            generate_expression(leftBin->left, asm_code, var_offsets);
+            asm_code << "    push rax\n";
+            generate_expression(leftBin->right, asm_code, var_offsets);
+            asm_code << "    mov rbx, rax\n";
+            asm_code << "    pop rax\n";
+            asm_code << "    cmp rax, rbx\n";
+            
+            // Jump past end-jump if left condition is TRUE
+            switch (leftBin->op) {
+                case TokenType::_lesser:
+                    asm_code << "    jl .or_satisfied_" << temp_label << "\n";
+                    break;
+                case TokenType::_greater:
+                    asm_code << "    jg .or_satisfied_" << temp_label << "\n";
+                    break;
+                case TokenType::_equals:
+                    asm_code << "    je .or_satisfied_" << temp_label << "\n";
+                    break;
+                case TokenType::_not_equals:
+                    asm_code << "    jne .or_satisfied_" << temp_label << "\n";
+                    break;
+                default:
+                    break;
+            }
+            
+            // Left was false, evaluate right condition
+            generate_expression(rightBin->left, asm_code, var_offsets);
+            asm_code << "    push rax\n";
+            generate_expression(rightBin->right, asm_code, var_offsets);
+            asm_code << "    mov rbx, rax\n";
+            asm_code << "    pop rax\n";
+            asm_code << "    cmp rax, rbx\n";
+            
+            // Jump to end if right condition is also FALSE
+            switch (rightBin->op) {
+                case TokenType::_lesser:
+                    asm_code << "    jge ." << label_prefix << "_end_" << label << "\n";
+                    break;
+                case TokenType::_greater:
+                    asm_code << "    jle ." << label_prefix << "_end_" << label << "\n";
+                    break;
+                case TokenType::_equals:
+                    asm_code << "    jne ." << label_prefix << "_end_" << label << "\n";
+                    break;
+                case TokenType::_not_equals:
+                    asm_code << "    je ." << label_prefix << "_end_" << label << "\n";
+                    break;
+                default:
+                    break;
+            }
+            
+            asm_code << ".or_satisfied_" << temp_label << ":\n";
+            return;
+        }
+        
+        if (binOp->op == TokenType::_and) {
+            // Short-circuit AND: if left is false, skip to end
+            int temp_label = label + 1000;
+            generate_expression(binOp->left, asm_code, var_offsets);
+            asm_code << "    test rax, rax\n";
+            asm_code << "    jz .and_false_" << temp_label << "\n";
+            generate_condition(binOp->right, asm_code, var_offsets, label, label_prefix);
+            asm_code << ".and_false_" << temp_label << ":\n";
+            return;
+        }
+        
+        // Handle comparison operators
+        generate_expression(binOp->left, asm_code, var_offsets);
+        asm_code << "    push rax\n";
+        generate_expression(binOp->right, asm_code, var_offsets);
+        asm_code << "    mov rbx, rax\n";
+        asm_code << "    pop rax\n";
+        asm_code << "    cmp rax, rbx\n";
+        
+        // Jump to end if condition is FALSE
+        switch (binOp->op) {
+            case TokenType::_lesser:
+                asm_code << "    jge ." << label_prefix << "_end_" << label << "\n";
+                break;
+            case TokenType::_greater:
+                asm_code << "    jle ." << label_prefix << "_end_" << label << "\n";
+                break;
+            case TokenType::_equals:
+                asm_code << "    jne ." << label_prefix << "_end_" << label << "\n";
+                break;
+            case TokenType::_not_equals:
+                asm_code << "    je ." << label_prefix << "_end_" << label << "\n";
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// Helper function declarations (add these to gen_asm.h or at the top)
+void generate_node(std::shared_ptr<ASTNode> node, 
+                   std::stringstream& asm_code,
+                   std::map<std::string, int>& var_offsets,
+                   int& stack_offset,
+                   int& label_counter);
+
+void generate_expression(std::shared_ptr<ASTNode> node,
+                        std::stringstream& asm_code,
+                        std::map<std::string, int>& var_offsets);
+
+void generate_condition(std::shared_ptr<ASTNode> node,
+                       std::stringstream& asm_code,
+                       std::map<std::string, int>& var_offsets,
+                       int label);
 
