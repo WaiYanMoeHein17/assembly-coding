@@ -43,8 +43,7 @@ function levenshteinDistance(s1: string, s2: string): number {
     return dp[len1][len2];
 }
 
-// Text-to-speech function (COMMENTED OUT)
-/*
+// Text-to-speech function
 function speak(text: string) {
     // Use child_process exec to run PowerShell TTS directly
     const escapedText = text.replace(/'/g, "''");
@@ -56,7 +55,6 @@ function speak(text: string) {
         }
     });
 }
-*/
 
 // Completion provider (no voice - voice is handled by text change listener)
 class DurhamCompletionProvider implements vscode.CompletionItemProvider {
@@ -94,8 +92,7 @@ class DurhamCompletionProvider implements vscode.CompletionItemProvider {
     }
 }
 
-// ========== TYPING GAME SECTION (COMMENTED OUT) ==========
-/*
+// ========== TYPING GAME SECTION ==========
 // Typing game state
 let gameActive = false;
 let gameTarget = '';
@@ -247,10 +244,10 @@ async function startTypingGame(editor: vscode.TextEditor, context: vscode.Extens
         : `🎮 Type: "${gameTarget}" as fast as you can!`;
     
     vscode.window.showInformationMessage(message);
-    // TTS COMMENTED OUT
-    // if (autoTriggered) {
-    //     speak('Speed demon detected!');
-    // }
+    // Text-to-speech for speed demon
+    if (autoTriggered) {
+        speak('Speed demon detected!');
+    }
 }
 
 // Function to cancel typing game
@@ -285,7 +282,6 @@ function cancelTypingGame(editor: vscode.TextEditor, context: vscode.ExtensionCo
     
     vscode.window.showInformationMessage('🚫 Typing challenge cancelled');
 }
-*/
 // ========== END TYPING GAME SECTION ==========
 
 // Completion provider initialization
@@ -294,15 +290,12 @@ let completionProvider: vscode.Disposable | null = null;
 export function activate(context: vscode.ExtensionContext) {
     console.log('Durham language extension is now active!');
 
-    // TYPING GAME INITIALIZATION COMMENTED OUT
-    /*
     // Create decoration types for typing game
     targetDecorationType = vscode.window.createTextEditorDecorationType({});
     errorDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: 'rgba(255, 0, 0, 0.3)',
         border: '1px solid red'
     });
-    */
 
     // Register completion provider
     completionProvider = vscode.languages.registerCompletionItemProvider(
@@ -311,8 +304,6 @@ export function activate(context: vscode.ExtensionContext) {
         ...DURHAM_KEYWORDS[0].split('') // Trigger on any character
     );
 
-    // TYPING GAME COMMANDS AND STATUS BAR COMMENTED OUT
-    /*
     // Create status bar item for typing game
     gameStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     gameStatusBar.command = 'durham.startTypingGame';
@@ -359,12 +350,9 @@ export function activate(context: vscode.ExtensionContext) {
             await vscode.commands.executeCommand('default:type', args);
         })
     );
-    */
     
     const textChangeListener = vscode.workspace.onDidChangeTextDocument(event => {
         if (event.document.languageId === 'durham' && event.contentChanges.length > 0) {
-            // TYPING GAME WPM TRACKING COMMENTED OUT
-            /*
             const change = event.contentChanges[0];
             const text = change.text;
 
@@ -440,13 +428,13 @@ export function activate(context: vscode.ExtensionContext) {
                 const progress = Math.min(100, Math.round((gameText.length / gameTarget.length) * 100));
                 gameStatusBar.text = `$(watch) ${progress}% | Type: ${gameTarget}`;
             }
-            */
-            
-            // TTS disabled during normal coding - only used for "Speed Demon Detected"
-            // Removed word voicing to avoid interruption during coding
         }
     });
 
+    // Add all subscriptions
+    context.subscriptions.push(startGameCommand);
+    context.subscriptions.push(cancelGameCommand);
+    context.subscriptions.push(gameStatusBar);
     if (completionProvider) {
         context.subscriptions.push(completionProvider);
     }

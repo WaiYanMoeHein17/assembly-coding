@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Durham Compiler Test</title>
+</head>
+<body>
+    <h1>Durham Compiler Test</h1>
+    <pre id="output"></pre>
+
+    <script src="compiler.js"></script>
+    <script>
+        const compiler = new DurhamCompiler();
+        
+        // Test 1: Simple print
+        console.log('=== Test 1: Simple Print ===');
+        let result = compiler.compile('tlc begin "Hello World" end.');
+        console.log('Result:', result);
+        document.getElementById('output').textContent += 'Test 1: ' + result.output + '\n\n';
+
+        // Test 2: Number variable
+        console.log('=== Test 2: Number Variable ===');
+        result = compiler.compile('number x is castle. tlc begin x end.');
+        console.log('Result:', result);
+        document.getElementById('output').textContent += 'Test 2: ' + result.output + '\n\n';
+
+        // Test 3: String concatenation
+        console.log('=== Test 3: String Concatenation ===');
+        result = compiler.compile('text hello is begin "Hello" end. text world is begin " World" end. text msg is hello durham world. tlc begin msg end.');
+        console.log('Result:', result);
+        document.getElementById('output').textContent += 'Test 3: ' + result.output + '\n\n';
+    </script>
+</body>
+</html>

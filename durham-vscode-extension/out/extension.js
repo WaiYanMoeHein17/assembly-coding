@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
+const child_process_1 = require("child_process");
 // Durham language keywords - matches TokenType enum from tokenizer.h
 const DURHAM_KEYWORDS = [
     // Numeric colleges (0-16)
@@ -43,20 +44,17 @@ function levenshteinDistance(s1, s2) {
     }
     return dp[len1][len2];
 }
-// Text-to-speech function (COMMENTED OUT)
-/*
-function speak(text: string) {
+// Text-to-speech function
+function speak(text) {
     // Use child_process exec to run PowerShell TTS directly
     const escapedText = text.replace(/'/g, "''");
     const command = `powershell -Command "Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak('${escapedText}')"`;
-    
-    exec(command, (error) => {
+    (0, child_process_1.exec)(command, (error) => {
         if (error) {
             console.error('TTS Error:', error);
         }
     });
 }
-*/
 // Completion provider (no voice - voice is handled by text change listener)
 class DurhamCompletionProvider {
     provideCompletionItems(document, position) {
@@ -241,10 +239,10 @@ async function startTypingGame(editor: vscode.TextEditor, context: vscode.Extens
         : `🎮 Type: "${gameTarget}" as fast as you can!`;
     
     vscode.window.showInformationMessage(message);
-    // TTS COMMENTED OUT
-    // if (autoTriggered) {
-    //     speak('Speed demon detected!');
-    // }
+    // Text-to-speech for speed demon
+    if (autoTriggered) {
+        speak('Speed demon detected!');
+    }
 }
 
 // Function to cancel typing game
