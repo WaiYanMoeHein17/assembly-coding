@@ -98,10 +98,25 @@ number sum is addition begin castle and marys end.
 tlc begin sum end.
 
 " ============================================ "
-" Test 8: For Loop "
+" Test 8: If-Else Statements "
 " ============================================ "
 tlc begin "" end.
-tlc begin "Test 8: For Loop" end.
+tlc begin "Test 8: If-Else" end.
+tlc begin "---------------" end.
+
+number age is hatfield.
+
+if begin age greater collingwood end front
+    tlc begin "Age is greater than 3" end.
+back else front
+    tlc begin "Age is NOT greater than 3" end.
+back
+
+" ============================================ "
+" Test 9: For Loop "
+" ============================================ "
+tlc begin "" end.
+tlc begin "Test 9: For Loop" end.
 tlc begin "----------------" end.
 
 for begin i is butler. i lesser castle. i is i durham chads end front 
@@ -109,11 +124,11 @@ for begin i is butler. i lesser castle. i is i durham chads end front
 back
 
 " ============================================ "
-" Test 9: Fibonacci Sequence "
+" Test 10: Fibonacci Sequence "
 " ============================================ "
 tlc begin "" end.
-tlc begin "Test 9: Fibonacci (first 10)" end.
-tlc begin "-----------------------------" end.
+tlc begin "Test 10: Fibonacci (first 10)" end.
+tlc begin "------------------------------" end.
 
 prev is butler.
 curr is chads.

@@ -312,6 +312,16 @@ std::shared_ptr<ASTNode> Parser::parseIfStatement() {
     
     consume(TokenType::close_brace, "Expected 'back' after if body");
     
+    // Check for else clause
+    if (current < tokens.size() && peek().type == TokenType::_else) {
+        consume(TokenType::_else, "Expected 'else'");
+        consume(TokenType::open_brace, "Expected 'front' after 'else'");
+        
+        ifNode->elseBranch = parseBlock();
+        
+        consume(TokenType::close_brace, "Expected 'back' after else body");
+    }
+    
     return ifNode;
 }
 

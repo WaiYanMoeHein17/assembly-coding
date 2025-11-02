@@ -1132,6 +1132,21 @@ void collect_strings(std::shared_ptr<ASTNode> node) {
         collect_strings(forNode->body);
     }
     
+    // Handle IfStatement nodes (they have condition, thenBranch, elseBranch)
+    if (node->type == NodeType::IfStatement) {
+        auto ifNode = std::static_pointer_cast<IfNode>(node);
+        collect_strings(ifNode->condition);
+        collect_strings(ifNode->thenBranch);
+        collect_strings(ifNode->elseBranch);
+    }
+    
+    // Handle WhileLoop nodes (they have condition and body)
+    if (node->type == NodeType::WhileLoop) {
+        auto whileNode = std::static_pointer_cast<WhileNode>(node);
+        collect_strings(whileNode->condition);
+        collect_strings(whileNode->body);
+    }
+    
     // Handle FunctionDecl nodes (they have parameters and body)
     if (node->type == NodeType::FunctionDecl) {
         auto funcNode = std::static_pointer_cast<FunctionDeclNode>(node);
@@ -1451,11 +1466,26 @@ void generate_node(std::shared_ptr<ASTNode> node,
             auto ifNode = std::static_pointer_cast<IfNode>(node);
             int if_label = label_counter++;
             
-            // Generate condition code
-            generate_condition(ifNode->condition, asm_code, var_offsets, if_label, "if");
+            // Generate condition code - jumps to else (or end if no else) when false
+            if (ifNode->elseBranch) {
+                // Jump to else branch when condition is false
+                generate_condition(ifNode->condition, asm_code, var_offsets, if_label, "if_else");
+            } else {
+                // Jump to end when condition is false
+                generate_condition(ifNode->condition, asm_code, var_offsets, if_label, "if");
+            }
             
             // Generate then branch
             generate_node(ifNode->thenBranch, asm_code, var_offsets, stack_offset, label_counter);
+            
+            // If there's an else branch, jump over it after then branch
+            if (ifNode->elseBranch) {
+                asm_code << "    jmp .if_end_" << if_label << "\n";
+                asm_code << ".if_else_end_" << if_label << ":\n";
+                
+                // Generate else branch
+                generate_node(ifNode->elseBranch, asm_code, var_offsets, stack_offset, label_counter);
+            }
             
             asm_code << ".if_end_" << if_label << ":\n";
             break;
